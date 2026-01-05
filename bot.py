@@ -30,13 +30,14 @@ from telegram.ext import (
 print("✅ Библиотеки загружены")
 
 # ====================== КОНФИГУРАЦИЯ ======================
-TOKEN = "8256725006:AAFV-2zx2OWxQdAP0Nxe9k4lYzq7_ofnyIw"
-ADMIN_ID = 7979729060
-ADMIN_USERNAME = "@profitclickadmin"
+# ВНИМАНИЕ: ЗАМЕНИТЕ ЭТИ ЗНАЧЕНИЯ НА СВОИ!
+TOKEN = os.environ.get('TOKEN', '8256725006:AAFV-2zx2OWxQdAP0Nxe9k4lYzq7_ofnyIw')
+ADMIN_ID = int(os.environ.get('ADMIN_ID', '7979729060'))
+ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', '@profitclickadmin')
 
 # КОНФИГУРАЦИЯ ЮKАССЫ
-YOOKASSA_SHOP_ID = "1241024"
-YOOKASSA_SECRET_KEY = "test_dovNMVr5Rjt6Ez5W5atO2a1RDpzNKLlQh6dcp-fDpsI"
+YOOKASSA_SHOP_ID = os.environ.get('YOOKASSA_SHOP_ID', '1241024')
+YOOKASSA_SECRET_KEY = os.environ.get('YOOKASSA_SECRET_KEY', 'test_dovNMVr5Rjt6Ez5W5atO2a1RDpzNKLlQh6dcp-fDpsI')
 YOOKASSA_API_URL = "https://api.yookassa.ru/v3/" if not YOOKASSA_SECRET_KEY.startswith("test_") else "https://api.yookassa.ru/v3/"
 
 # Настройка логирования
@@ -403,7 +404,7 @@ def main_menu_keyboard():
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-# ====================== ОБНОВЛЕННЫЕ КУРСЫ С ПРАВИЛЬНЫМИ ССЫЛКАМИ ======================
+# ====================== ОБНОВЛЕННЫЕ КУРСЫ ======================
 COURSES = {
     "course_1": {
         "title": "🎨 Основы графического дизайна",
@@ -995,7 +996,7 @@ async def check_payment_status(update: Update, context: ContextTypes.DEFAULT_TYP
         
         await query.edit_message_text(
             "❌ **Платеж отменен**\n\n"
-            "Платеж был отменен или произошла ошибка оплаты.",
+            "Платеж был отменен или произошла ошибка оплата.",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
@@ -1008,7 +1009,7 @@ async def check_payment_status(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode='Markdown'
         )
 
-# ====================== ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ (ВСЕ В ОДНОМ) ======================
+# ====================== ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ ======================
 async def profile_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
@@ -1022,12 +1023,6 @@ async def profile_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     achievements = db.get_list(user_id, "achievements")
     transactions = db.get_list(user_id, "transactions")
     rating = get_user_rating(user_id)
-    
-    # Получаем все купленные курсы
-    purchased_courses = []
-    for course_id in COURSES:
-        if db.has(user_id, f"course_{course_id}"):
-            purchased_courses.append(course_id)
     
     total_earned = sum([t["amount"] for t in transactions if t["amount"] > 0])
     total_spent = abs(sum([t["amount"] for t in transactions if t["amount"] < 0]))
@@ -1056,195 +1051,12 @@ async def profile_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     referral_link = f"https://t.me/{bot_info.username}?start={referral_code}"
     text += f"🔗 **Реферальная ссылка:**\n`{referral_link}`\n\n"
     
-    # Мои покупки
-    if purchased_courses:
-        text += "🛒 **Мои покупки:**\n"
-        for i, course_id in enumerate(purchased_courses[:3], 1):
-            course = COURSES[course_id]
-            text += f"{i}. {course['title']}\n"
-        if len(purchased_courses) > 3:
-            text += f"... и еще {len(purchased_courses) - 3}\n"
-        text += "\n"
-    
     keyboard = [
         [InlineKeyboardButton("📊 История операций", callback_data="history")],
         [InlineKeyboardButton("🤝 Реферальная система", callback_data="referral_menu")],
         [InlineKeyboardButton("🏆 Все достижения", callback_data="all_achievements")],
-        [InlineKeyboardButton("🛒 Все покупки", callback_data="all_purchases")],
-        [InlineKeyboardButton("🏆 Рейтинги", callback_data="ratings_menu")]
-    ]
-    
-    # Добавляем кнопку пополнения, если баланс низкий
-    if balance < 100:
-        keyboard.insert(0, [InlineKeyboardButton("💳 Пополнить баланс", callback_data="deposit")])
-    
-    keyboard.append([InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")])
-    
-    await update.message.reply_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
-
-async def all_purchases_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user = query.from_user
-    user_id = user.id
-    
-    await query.answer()
-    
-    # Получаем все купленные курсы
-    purchased_courses = []
-    for course_id in COURSES:
-        if db.has(user_id, f"course_{course_id}"):
-            purchased_courses.append(course_id)
-    
-    # Получаем историю покупок
-    purchases = db.get_list(user_id, "purchased_items")
-    
-    if not purchased_courses and not purchases:
-        await query.edit_message_text(
-            "🛒 **Мои покупки**\n\n"
-            "У вас пока нет покупок.\n\n"
-            "🎓 Посмотрите доступные курсы в разделе '🎓 Курсы'",
-            parse_mode='Markdown'
-        )
-        return
-    
-    text = "🛒 **Все мои покупки**\n\n"
-    
-    if purchased_courses:
-        text += "🎓 **Купленные курсы:**\n\n"
-        for i, course_id in enumerate(purchased_courses, 1):
-            course = COURSES[course_id]
-            text += f"{i}. **{course['title']}** - {course['price']}₽\n"
-        
-        keyboard = []
-        for course_id in purchased_courses:
-            course = COURSES[course_id]
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"📖 {course['title']}",
-                    callback_data=f"open_course_{course_id}"
-                )
-            ])
-        
-        if purchases:
-            text += "\n📋 **История покупок:**\n"
-            recent_purchases = purchases[-5:][::-1]
-            for purchase in recent_purchases:
-                date = datetime.fromisoformat(purchase["date"]).strftime("%d.%m.%Y")
-                text += f"• {date} - {purchase['description']} - {purchase['amount']}₽\n"
-        
-        keyboard.append([InlineKeyboardButton("◀️ Назад в профиль", callback_data="profile_menu")])
-        
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-    else:
-        # Только история покупок
-        text += "📋 **История покупок:**\n\n"
-        for purchase in purchases[-10:][::-1]:
-            date = datetime.fromisoformat(purchase["date"]).strftime("%d.%m.%Y %H:%M")
-            text += f"• {date}\n{purchase['description']} - {purchase['amount']}₽\n\n"
-        
-        keyboard = [
-            [InlineKeyboardButton("🎓 Смотреть курсы", callback_data="courses_menu")],
-            [InlineKeyboardButton("◀️ Назад в профиль", callback_data="profile_menu")]
-        ]
-        
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-
-async def open_course(update: Update, context: ContextTypes.DEFAULT_TYPE, course_id: str):
-    query = update.callback_query
-    user = query.from_user
-    
-    await query.answer()
-    
-    course = COURSES[course_id]
-    
-    keyboard = [
-        [InlineKeyboardButton("🎬 Открыть плейлист YouTube", url=course["youtube_playlist"])],
-        [InlineKeyboardButton("⬅️ Назад к покупкам", callback_data="all_purchases")]
-    ]
-    
-    await query.edit_message_text(
-        f"🎓 **{course['title']}**\n\n"
-        f"💰 Цена покупки: {course['price']}₽\n"
-        f"📚 Описание: {course['description']}\n\n"
-        f"🔗 **Доступ к материалам:**\n"
-        f"Нажмите кнопку ниже, чтобы открыть полный плейлист курса на YouTube.\n\n"
-        f"🎯 **Рекомендации:**\n"
-        f"• Смотрите уроки по порядку\n"
-        f"• Практикуйтесь после каждого урока\n"
-        f"• Задавайте вопросы в комментариях\n"
-        f"• Делайте заметки",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
-
-# ====================== РЕЙТИНГИ ======================
-async def ratings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_id = user.id
-    
-    # Получаем топ пользователей
-    top_users = get_top_users(limit=15)
-    
-    # Получаем позицию текущего пользователя
-    user_rating = get_user_rating(user_id)
-    user_position = None
-    
-    for i, (uid, rating) in enumerate(top_users, 1):
-        if uid == user_id:
-            user_position = i
-            break
-    
-    text = "🏆 **Рейтинги пользователей**\n\n"
-    
-    if user_position:
-        text += f"⭐ **Ваша позиция:** #{user_position}\n"
-        text += f"📊 **Ваш рейтинг:** {user_rating} очков\n\n"
-    
-    text += "**Топ-15 пользователей:**\n\n"
-    
-    for i, (uid, rating) in enumerate(top_users[:15], 1):
-        medal = ""
-        if i == 1:
-            medal = "🥇 "
-        elif i == 2:
-            medal = "🥈 "
-        elif i == 3:
-            medal = "🥉 "
-        
-        if uid == user_id:
-            text += f"{i}. {medal}👤 **Вы** - {rating} очков ⭐\n"
-        else:
-            # Пытаемся получить имя пользователя
-            try:
-                chat = await context.bot.get_chat(uid)
-                name = chat.first_name or f"Пользователь {uid}"
-                username = f" (@{chat.username})" if chat.username else ""
-                text += f"{i}. {medal}👤 {name}{username} - {rating} очков\n"
-            except:
-                text += f"{i}. {medal}👤 Пользователь {uid} - {rating} очков\n"
-    
-    text += "\n📈 **Как считается рейтинг:**\n"
-    text += "• Баланс × 0.001\n"
-    text += "• Задания × 10\n"
-    text += "• Рефералы × 50\n"
-    text += "• Покупки × 30\n"
-    text += "• Достижения × 100\n"
-    
-    keyboard = [
-        [InlineKeyboardButton("👤 Мой профиль", callback_data="profile_menu")],
-        [InlineKeyboardButton("🤝 Рефералы", callback_data="referral_menu")],
+        [InlineKeyboardButton("🛒 Мои покупки", callback_data="my_purchases")],
+        [InlineKeyboardButton("🏆 Рейтинги", callback_data="ratings_menu")],
         [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
     ]
     
@@ -1254,77 +1066,160 @@ async def ratings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
-# ====================== ИСТОРИЯ ОПЕРАЦИЙ ======================
+# ====================== ОБРАБОТКА КНОПОК ======================
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    
+    if not query:
+        return
+    
+    await query.answer()
+    
+    user_id = query.from_user.id
+    data = query.data
+    
+    # Основные команды
+    if data == "main_menu":
+        user = query.from_user
+        balance = db.get(user.id, "balance", 0)
+        
+        await query.message.reply_text(
+            f"👋 Добро пожаловать, {user.first_name}!\n"
+            f"💰 Твой баланс: {balance}₽",
+            reply_markup=main_menu_keyboard()
+        )
+        return
+    
+    elif data == "balance_menu":
+        await balance_menu(Update(update.update_id, message=query.message), context)
+        return
+    
+    elif data == "profile_menu":
+        await profile_menu(Update(update.update_id, message=query.message), context)
+        return
+    
+    elif data == "deposit":
+        await deposit_menu(update, context)
+        return
+    
+    elif data.startswith("deposit_"):
+        try:
+            amount = int(data.split("_")[1])
+            await process_deposit(update, context, amount)
+        except ValueError:
+            await query.answer("❌ Ошибка суммы", show_alert=True)
+        return
+    
+    elif data.startswith("check_payment_"):
+        payment_id = data.replace("check_payment_", "")
+        await check_payment_status(update, context, payment_id)
+        return
+    
+    elif data == "history":
+        from telegram import Update as Upd
+        upd = Upd(update.update_id, callback_query=query)
+        await history_menu(upd, context)
+        return
+    
+    # Остальные callback данные
+    elif data == "referral_menu":
+        await referral_menu(update, context)
+        return
+    
+    elif data == "ratings_menu":
+        await ratings_menu(update, context)
+        return
+    
+    elif data == "all_achievements":
+        await all_achievements_menu(update, context)
+        return
+    
+    elif data == "my_purchases":
+        await my_purchases_menu(update, context)
+        return
+    
+    elif data.startswith("view_course_"):
+        course_id = data.replace("view_course_", "")
+        await view_course(update, context, course_id)
+        return
+    
+    elif data.startswith("buy_"):
+        course_id = data.replace("buy_", "")
+        await buy_course(update, context, course_id)
+        return
+    
+    elif data == "back_to_courses":
+        await courses_menu(update, context)
+        return
+    
+    elif data == "fill_form":
+        task_id = db.get(user_id, "current_task")
+        if task_id:
+            task_info = TASK_DATA.get(task_id)
+            if task_info:
+                db.set(user_id, "waiting_form", True)
+                await query.message.reply_text(
+                    f"📝 **{task_info['title']}**\n\n"
+                    "Отправьте данные в формате:\n"
+                    "Имя Фамилия Телефон Номер_карты @username\n\n"
+                    "Пример:\nИван Иванов +79991234567 1234567812345678 @ivanov"
+                )
+        return
+    
+    elif data in TASK_DATA:
+        task_info = TASK_DATA[data]
+        db.set(user_id, "current_task", data)
+        
+        keyboard = [
+            [InlineKeyboardButton("🔗 Перейти по ссылке", url=task_info['link'])],
+            [InlineKeyboardButton("✅ Выполнил задание", callback_data="fill_form")]
+        ]
+        
+        await query.message.reply_text(
+            f"**{task_info['title']}**\n\n{task_info['description']}",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+
+# ====================== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ======================
 async def history_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query:
-        await query.answer()
-        user_id = query.from_user.id
-    else:
-        user_id = update.effective_user.id
+    user_id = query.from_user.id
+    
+    await query.answer()
     
     transactions = db.get_list(user_id, "transactions")
     
     if not transactions:
-        text = "📊 **История операций**\n\n"
-        text += "У вас пока нет операций."
-        keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="balance_menu")]]
-        
-        if query:
-            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-        else:
-            await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await query.edit_message_text(
+            "📊 **История операций**\n\n"
+            "У вас пока нет операций.",
+            parse_mode='Markdown'
+        )
         return
     
     recent_transactions = transactions[-10:][::-1]
     text = "📊 **История операций**\n\n"
-    text += f"Всего операций: {len(transactions)}\n\n"
-    
-    type_icons = {
-        "deposit": "💳",
-        "withdraw": "💸",
-        "bonus": "🎁",
-        "referral": "🤝",
-        "purchase": "🛒",
-        "payment": "💎"
-    }
-    
-    type_names = {
-        "deposit": "Пополнение",
-        "withdraw": "Списание",
-        "bonus": "Бонус",
-        "referral": "Реферал",
-        "purchase": "Покупка",
-        "payment": "Оплата"
-    }
     
     for trans in recent_transactions:
         date = datetime.fromisoformat(trans["date"]).strftime("%d.%m.%Y %H:%M")
-        icon = type_icons.get(trans["type"], "💰")
-        type_name = type_names.get(trans["type"], trans["type"])
         amount = trans["amount"]
         sign = "+" if amount > 0 else ""
-        
-        text += f"{icon} {date}\n"
-        text += f"{type_name}: {sign}{amount}₽\n"
-        
-        if trans.get("description"):
-            text += f" {trans['description']}\n"
-        text += "\n"
+        text += f"📅 {date}\n"
+        text += f"💰 {sign}{amount}₽ - {trans.get('description', 'Операция')}\n\n"
     
     keyboard = [
-        [InlineKeyboardButton("◀️ Назад", callback_data="balance_menu")]
+        [InlineKeyboardButton("◀️ Назад", callback_data="profile_menu")]
     ]
     
-    if query:
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-    else:
-        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
-# ====================== РЕФЕРАЛЬНАЯ СИСТЕМА ======================
 async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
+    query = update.callback_query
+    user = query.from_user
     user_id = user.id
+    
+    await query.answer()
     
     referral_code = get_referral_code(user_id)
     referrals = db.get_list(user_id, "referrals")
@@ -1332,40 +1227,40 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_info = await context.bot.get_me()
     referral_link = f"https://t.me/{bot_info.username}?start={referral_code}"
     
-    total_earned = sum([t["amount"] for t in db.get_list(user_id, "transactions") if t.get("type") == "referral"])
-    
     text = "🤝 **Реферальная система**\n\n"
-    text += f"📎 Ваша реферальная ссылка:\n{referral_link}\n\n"
-    text += f"👥 Приглашено друзей: {len(referrals)}\n"
-    text += f"💰 Заработано на рефералах: {total_earned}₽\n\n"
-    text += "💡 За каждого приглашенного друга вы получаете 50₽!\n"
-    text += "А ваш друг получает 25₽ бонусом при регистрации.\n\n"
-    text += "📊 **Топ рефералов:**\n"
-    
-    all_users = db.data.keys()
-    referral_stats = []
-    
-    for uid in all_users:
-        refs = db.get_list(uid, "referrals")
-        if refs:
-            referral_stats.append((uid, len(refs)))
-    
-    referral_stats.sort(key=lambda x: x[1], reverse=True)
-    top_referrals = referral_stats[:5]
-    
-    for i, (uid, count) in enumerate(top_referrals, 1):
-        if uid == user_id:
-            text += f"{i}. 👤 Вы - {count} рефералов ⭐\n"
-        else:
-            text += f"{i}. 👤 Пользователь {uid} - {count} рефералов\n"
+    text += f"📎 Ваша ссылка:\n`{referral_link}`\n\n"
+    text += f"👥 Приглашено: {len(referrals)}\n"
+    text += "💰 За каждого друга: 50₽\n"
+    text += "🎁 Друг получает: 25₽\n\n"
+    text += "💡 Поделитесь ссылкой с друзьями!"
     
     keyboard = [
-        [InlineKeyboardButton("📋 Скопировать ссылку", callback_data="copy_referral")],
-        [InlineKeyboardButton("🏆 Рейтинги", callback_data="ratings_menu")],
         [InlineKeyboardButton("◀️ Назад", callback_data="profile_menu")]
     ]
     
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def ratings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    await query.answer()
+    
+    top_users = get_top_users(limit=10)
+    
+    text = "🏆 **Топ пользователей**\n\n"
+    
+    for i, (uid, rating) in enumerate(top_users, 1):
+        if uid == user_id:
+            text += f"{i}. 👤 **Вы** - {rating} очков ⭐\n"
+        else:
+            text += f"{i}. 👤 Пользователь {uid} - {rating} очков\n"
+    
+    keyboard = [
+        [InlineKeyboardButton("◀️ Назад", callback_data="profile_menu")]
+    ]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
 async def all_achievements_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1374,39 +1269,99 @@ async def all_achievements_menu(update: Update, context: ContextTypes.DEFAULT_TY
     user_id = query.from_user.id
     user_achievements = db.get_list(user_id, "achievements")
     
-    all_achievements = {
-        "first_task": {"name": "🎯 Первое задание", "desc": "Выполните первое задание", "reward": "50₽"},
-        "task_beginner": {"name": "🌱 Новичок", "desc": "Выполните 10 заданий", "reward": "100₽"},
-        "task_pro": {"name": "⭐ Профи заданий", "desc": "Выполните 50 заданий", "reward": "500₽"},
-        "task_master": {"name": "🏆 Мастер заданий", "desc": "Выполните 100 заданий", "reward": "1000₽"},
-        "wealthy": {"name": "💴 Состоятельный", "desc": "Накопите 10,000₽", "reward": "200₽"},
-        "rich": {"name": "💵 Богач", "desc": "Накопите 100,000₽", "reward": "500₽"},
-        "millionaire": {"name": "💰 Миллионер", "desc": "Накопите 1,000,000₽", "reward": "1000₽"},
-        "referral_pro": {"name": "🤝 Реферальный профи", "desc": "Пригласите 5 друзей", "reward": "200₽"},
-        "referral_king": {"name": "👑 Король рефералов", "desc": "Пригласите 10 друзей", "reward": "500₽"},
-        "shopper": {"name": "🛒 Шопоголик", "desc": "Купите 5+ товаров/курсов", "reward": "300₽"},
-        "investor": {"name": "📈 Инвестор", "desc": "Накопите 5,000₽ на балансе", "reward": "200₽"}
-    }
-    
     text = "🏆 **Все достижения**\n\n"
     
-    for ach_id, ach_info in all_achievements.items():
+    achievements_list = [
+        ("🎯 Первое задание", "Выполните первое задание", "first_task"),
+        ("🌱 Новичок", "Выполните 10 заданий", "task_beginner"),
+        ("⭐ Профи заданий", "Выполните 50 заданий", "task_pro"),
+        ("🏆 Мастер заданий", "Выполните 100 заданий", "task_master"),
+        ("💴 Состоятельный", "Накопите 10,000₽", "wealthy"),
+        ("💵 Богач", "Накопите 100,000₽", "rich"),
+        ("💰 Миллионер", "Накопите 1,000,000₽", "millionaire"),
+        ("🤝 Реферальный профи", "Пригласите 5 друзей", "referral_pro"),
+        ("👑 Король рефералов", "Пригласите 10 друзей", "referral_king"),
+        ("🛒 Шопоголик", "Купите 5+ товаров/курсов", "shopper"),
+        ("📈 Инвестор", "Накопите 5,000₽ на балансе", "investor")
+    ]
+    
+    for name, desc, ach_id in achievements_list:
         if ach_id in user_achievements:
-            text += f"✅ {ach_info['name']}\n"
-            text += f"   {ach_info['desc']}\n"
-            text += f"   🎁 Награда: {ach_info['reward']}\n\n"
+            text += f"✅ {name}\n"
         else:
-            text += f"❌ {ach_info['name']}\n"
-            text += f"   {ach_info['desc']}\n"
-            text += f"   🎁 Награда: {ach_info['reward']}\n\n"
+            text += f"❌ {name}\n"
+        text += f"   {desc}\n\n"
     
     keyboard = [
-        [InlineKeyboardButton("◀️ Назад в профиль", callback_data="profile_menu")]
+        [InlineKeyboardButton("◀️ Назад", callback_data="profile_menu")]
     ]
     
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
-# ====================== КУРСЫ (БЕЗ ПРЕДПРОСМОТРА) ======================
+async def my_purchases_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    await query.answer()
+    
+    # Получаем купленные курсы
+    purchased_courses = []
+    for course_id in COURSES:
+        if db.has(user_id, f"course_{course_id}"):
+            purchased_courses.append(course_id)
+    
+    if not purchased_courses:
+        await query.edit_message_text(
+            "🛒 **Мои покупки**\n\n"
+            "У вас пока нет покупок.\n"
+            "🎓 Посмотрите курсы в разделе '🎓 Курсы'",
+            parse_mode='Markdown'
+        )
+        return
+    
+    text = "🛒 **Мои покупки**\n\n"
+    
+    for course_id in purchased_courses:
+        course = COURSES[course_id]
+        text += f"🎓 {course['title']}\n"
+        text += f"💰 {course['price']}₽\n\n"
+    
+    keyboard = []
+    for course_id in purchased_courses:
+        course = COURSES[course_id]
+        keyboard.append([
+            InlineKeyboardButton(
+                f"📖 {course['title'][:20]}...",
+                callback_data=f"view_course_{course_id}"
+            )
+        ])
+    
+    keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="profile_menu")])
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def view_course(update: Update, context: ContextTypes.DEFAULT_TYPE, course_id: str):
+    query = update.callback_query
+    user = query.from_user
+    
+    await query.answer()
+    
+    course = COURSES[course_id]
+    
+    keyboard = [
+        [InlineKeyboardButton("🎬 Открыть курс на YouTube", url=course["youtube_playlist"])],
+        [InlineKeyboardButton("◀️ Назад к покупкам", callback_data="my_purchases")]
+    ]
+    
+    await query.edit_message_text(
+        f"🎓 **{course['title']}**\n\n"
+        f"📚 {course['description']}\n\n"
+        f"💰 Цена покупки: {course['price']}₽\n\n"
+        "Нажмите кнопку ниже, чтобы открыть плейлист курса:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
+
 async def courses_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     for course_id, course in COURSES.items():
@@ -1421,20 +1376,14 @@ async def courses_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         "🎓 **Доступные курсы:**\n\n"
-        "Выберите курс для покупки:\n\n"
-        "🎬 Каждый курс включает полный плейлист YouTube уроков\n"
-        "📚 Практические задания и материалы\n"
-        "✅ Доступ навсегда после покупки",
+        "Выберите курс для покупки:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
 
-async def buy_course(update: Update, context: ContextTypes.DEFAULT_TYPE, course_id):
+async def buy_course(update: Update, context: ContextTypes.DEFAULT_TYPE, course_id: str):
     query = update.callback_query
     user = query.from_user
-    
-    if not query:
-        return
     
     await query.answer()
     
@@ -1442,21 +1391,6 @@ async def buy_course(update: Update, context: ContextTypes.DEFAULT_TYPE, course_
     
     if db.has(user.id, f"course_{course_id}"):
         await query.answer("✅ У вас уже есть этот курс!", show_alert=True)
-        
-        keyboard = [
-            [InlineKeyboardButton("🎬 Открыть плейлист", url=course["youtube_playlist"])],
-            [InlineKeyboardButton("◀️ Назад к курсам", callback_data="back_to_courses")]
-        ]
-        
-        await query.edit_message_text(
-            f"🎓 **{course['title']}**\n\n"
-            f"💰 Цена: {course['price']}₽\n\n"
-            f"✅ **Вы уже приобрели этот курс!**\n\n"
-            f"🔗 Ссылка на плейлист:\n{course['youtube_playlist']}\n\n"
-            "Нажмите кнопку ниже, чтобы открыть плейлист.",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
         return
     
     balance = db.get(user.id, "balance", 0)
@@ -1466,53 +1400,19 @@ async def buy_course(update: Update, context: ContextTypes.DEFAULT_TYPE, course_
         db.add(user.id, "balance", -course['price'])
         db.set(user.id, f"course_{course_id}", True)
         
-        # Добавляем в историю покупок
-        purchase_record = {
-            "date": datetime.now().isoformat(),
-            "type": "purchase",
-            "amount": -course['price'],
-            "description": f"Курс: {course['title']}",
-            "course_id": course_id
-        }
-        db.append(user.id, "purchased_items", purchase_record)
-        
-        add_transaction(user.id, "purchase", -course['price'], f"Покупка курса: {course['title']}")
-        
-        # Проверяем достижения
-        check_achievements(user.id)
-        
-        # Уведомление администратору
-        admin_msg = (
-            f"🎓 НОВАЯ ПОКУПКА КУРСА\n\n"
-            f"👤 Пользователь: @{user.username or 'без username'}\n"
-            f"🆔 ID: {user.id}\n"
-            f"💳 Курс: {course['title']}\n"
-            f"💰 Сумма: {course['price']}₽\n"
-            f"📊 Новый баланс: {db.get(user.id, 'balance', 0)}₽"
-        )
-        
-        try:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=admin_msg)
-        except Exception as e:
-            logger.error(f"Ошибка отправки сообщения админу: {e}")
+        add_transaction(user.id, "purchase", -course['price'], f"Курс: {course['title']}")
         
         keyboard = [
-            [InlineKeyboardButton("🎬 Открыть плейлист", url=course["youtube_playlist"])],
+            [InlineKeyboardButton("🎬 Открыть курс", url=course["youtube_playlist"])],
             [InlineKeyboardButton("🎓 Другие курсы", callback_data="back_to_courses")]
         ]
         
         await query.edit_message_text(
             f"🎉 **Поздравляем с покупкой!**\n\n"
-            f"🎓 **{course['title']}**\n\n"
+            f"🎓 {course['title']}\n"
             f"💰 СписаноВ: {course['price']}₽\n"
             f"📊 Новый баланс: {db.get(user.id, 'balance', 0)}₽\n\n"
-            f"🔗 **Ссылка на плейлист курса:**\n{course['youtube_playlist']}\n\n"
-            "Нажмите кнопку ниже, чтобы начать обучение!\n\n"
-            "🎯 **Советы:**\n"
-            "• Смотрите уроки по порядку\n"
-            "• Выполняйте практические задания\n"
-            "• Задавайте вопросы в комментариях\n"
-            "• Делитесь прогрессом с друзьями",
+            "Курс доступен в вашем профиле!",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
@@ -1521,311 +1421,14 @@ async def buy_course(update: Update, context: ContextTypes.DEFAULT_TYPE, course_
         
         keyboard = [
             [InlineKeyboardButton("💳 Пополнить баланс", callback_data="deposit")],
-            [InlineKeyboardButton("◀️ Назад к курсам", callback_data="back_to_courses")]
+            [InlineKeyboardButton("◀️ Назад", callback_data="back_to_courses")]
         ]
         
         await query.edit_message_text(
             f"🎓 **{course['title']}**\n\n"
             f"💰 Цена: {course['price']}₽\n"
             f"📊 Ваш баланс: {balance}₽\n\n"
-            "❌ Недостаточно средств для покупки!\n\n"
-            f"💳 Пополните баланс через меню '💰 Баланс'\n"
-            "✅ Быстрое пополнение через ЮKассу",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-
-# ====================== ОБРАБОТКА МЕНЮ ======================
-async def show_tasks(message):
-    keyboard = [
-        [InlineKeyboardButton("Лендинг с заданиями", callback_data="task_1")],
-        [InlineKeyboardButton("Яндекс.Браузер ПК", callback_data="task_2")],
-        [InlineKeyboardButton("Яндекс.Браузер смартфон", callback_data="task_3")],
-        [InlineKeyboardButton("Яндекс.Поиск", callback_data="task_4")],
-        [InlineKeyboardButton("Приложение с Алисой", callback_data="task_5")]
-    ]
-    await message.reply_text("🏆 Задания Яндекса:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def show_jobs(message):
-    keyboard = [
-        [InlineKeyboardButton("Яндекс.Курьер", callback_data="job_1")],
-        [InlineKeyboardButton("Партнёр Альфа-Банк", callback_data="job_2")],
-        [InlineKeyboardButton("Брокер Альфа-Банк", callback_data="job_3")]
-    ]
-    await message.reply_text("💼 Работа:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def show_cards(message):
-    keyboard = [
-        [InlineKeyboardButton("T-BANK Black 500₽", callback_data="card_1")],
-        [InlineKeyboardButton("T-BANK Исламская 700₽", callback_data="card_2")],
-        [InlineKeyboardButton("ALL Airlines 500₽", callback_data="card_3")],
-        [InlineKeyboardButton("T-BANK Platinum 500₽", callback_data="card_4")],
-        [InlineKeyboardButton("ПСБ Кешбэк 700₽", callback_data="card_5")],
-        [InlineKeyboardButton("ВТБ Кредитная 2000₽", callback_data="card_6")],
-        [InlineKeyboardButton("Плати по миру 5000₽", callback_data="card_7")],
-        [InlineKeyboardButton("Альфа-Карта 4000₽", callback_data="card_8")],
-        [InlineKeyboardButton("Семейный счёт 2500₽", callback_data="card_9")],
-        [InlineKeyboardButton("60 дней без % 8500₽", callback_data="card_10")],
-        [InlineKeyboardButton("Детская карта 3500₽", callback_data="card_11")]
-    ]
-    await message.reply_text("💳 Банковские карты:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def show_credits(message):
-    keyboard = [
-        [InlineKeyboardButton("Кредит наличными 5000₽", callback_data="credit_1")],
-        [InlineKeyboardButton("Кредит на планы 2500₽", callback_data="credit_2")],
-        [InlineKeyboardButton("Ипотека 250 000₽", callback_data="credit_3")],
-        [InlineKeyboardButton("Предодобренный 25 000₽", callback_data="credit_4")]
-    ]
-    await message.reply_text("💰 Кредиты:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def show_insurance(message):
-    keyboard = [
-        [InlineKeyboardButton("Zetta спортсмены 1000₽", callback_data="insur_1")],
-        [InlineKeyboardButton("Zetta школьники", callback_data="insur_2")],
-        [InlineKeyboardButton("Сберстрахование 2500₽", callback_data="insur_3")],
-        [InlineKeyboardButton("Т-Страхование", callback_data="insur_4")]
-    ]
-    await message.reply_text("🛡 Страхование:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def show_real_estate(message):
-    keyboard = [
-        [InlineKeyboardButton("Яндекс.Аренда 30 000₽", callback_data="estate_1")]
-    ]
-    await message.reply_text("🏠 Недвижимость:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def show_tourism(message):
-    keyboard = [
-        [InlineKeyboardButton("AVIASALES 5000₽", callback_data="tour_1")],
-        [InlineKeyboardButton("Яндекс.Путешествия 3000₽", callback_data="tour_2")],
-        [InlineKeyboardButton("KIWITAXI 5000₽", callback_data="tour_3")]
-    ]
-    await message.reply_text("✈️ Туризм:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def show_business(message):
-    keyboard = [
-        [InlineKeyboardButton("Регистрация бизнеса 25 000₽", callback_data="biz_1")],
-        [InlineKeyboardButton("Расчётный счёт 2000₽", callback_data="biz_2")],
-        [InlineKeyboardButton("Интернет-эквайринг 15 000₽", callback_data="biz_3")]
-    ]
-    await message.reply_text("🏢 Бизнес:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def show_brokerage(message):
-    keyboard = [
-        [InlineKeyboardButton("Брокерский счёт 12 500₽", callback_data="broker_1")]
-    ]
-    await message.reply_text("📊 Брокерские счета:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def show_subscriptions(message):
-    keyboard = [
-        [InlineKeyboardButton("Alfa Only Premium 2500₽", callback_data="sub_1")]
-    ]
-    await message.reply_text("🌟 Подписки:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def show_sim_cards(message):
-    keyboard = [
-        [InlineKeyboardButton("Альфа-Мобайл 500₽", callback_data="sim_1")]
-    ]
-    await message.reply_text("📱 SIM-карты:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    
-    if text == "🏆 Задания":
-        await show_tasks(update.message)
-    elif text == "💼 Работа":
-        await show_jobs(update.message)
-    elif text == "💳 Банковские карты":
-        await show_cards(update.message)
-    elif text == "💰 Кредиты":
-        await show_credits(update.message)
-    elif text == "🛡 Страхование":
-        await show_insurance(update.message)
-    elif text == "🏠 Недвижимость":
-        await show_real_estate(update.message)
-    elif text == "✈️ Туризм и путешествия":
-        await show_tourism(update.message)
-    elif text == "🏢 Бизнес":
-        await show_business(update.message)
-    elif text == "📊 Брокерские счета":
-        await show_brokerage(update.message)
-    elif text == "🌟 Подписки":
-        await show_subscriptions(update.message)
-    elif text == "📱 SIM-карты":
-        await show_sim_cards(update.message)
-    elif text == "🎓 Курсы":
-        await courses_menu(update, context)
-    elif text == "💰 Баланс":
-        await balance_menu(update, context)
-    elif text == "👤 Профиль":
-        await profile_menu(update, context)
-    elif text == "📞 Связь с админом":
-        await update.message.reply_text(
-            f"📞 Связь с администратором:\n\n"
-            f"Telegram: {ADMIN_USERNAME}\n\n"
-            "Напишите админу для решения вопросов:\n"
-            "• Проблемы с заданиями\n"
-            "• Вопросы по выплатам\n"
-            "• Технические проблемы\n"
-            "• Предложения по улучшению",
-            reply_markup=main_menu_keyboard()
-        )
-
-# ====================== ОБРАБОТКА КНОПОК ======================
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    
-    if not query:
-        return
-    
-    await query.answer()
-    
-    user_id = query.from_user.id
-    data = query.data
-    
-    if data == "main_menu":
-        user = query.from_user
-        balance = db.get(user.id, "balance", 0)
-        
-        await query.message.reply_text(
-            f"👋 Добро пожаловать, {user.first_name}!\n"
-            f"💰 Твой баланс: {balance}₽",
-            reply_markup=main_menu_keyboard()
-        )
-        return
-    
-    if data == "balance_menu":
-        await balance_menu(Update(update.update_id, message=query.message), context)
-        return
-    
-    if data == "history":
-        update_obj = Update(update.update_id, callback_query=query)
-        await history_menu(update_obj, context)
-        return
-    
-    if data == "profile_menu":
-        update_obj = Update(update.update_id, message=query.message)
-        await profile_menu(update_obj, context)
-        return
-    
-    if data == "all_purchases":
-        await all_purchases_menu(update, context)
-        return
-    
-    if data == "referral_menu":
-        update_obj = Update(update.update_id, message=query.message)
-        await referral_menu(update_obj, context)
-        return
-    
-    if data == "ratings_menu":
-        update_obj = Update(update.update_id, message=query.message)
-        await ratings_menu(update_obj, context)
-        return
-    
-    if data == "all_achievements":
-        await all_achievements_menu(update, context)
-        return
-    
-    if data == "copy_referral":
-        user_id = query.from_user.id
-        referral_code = get_referral_code(user_id)
-        bot_info = await context.bot.get_me()
-        referral_link = f"https://t.me/{bot_info.username}?start={referral_code}"
-        await query.answer(f"Ссылка: {referral_link}", show_alert=True)
-        return
-    
-    if data == "deposit":
-        await deposit_menu(update, context)
-        return
-    
-    if data.startswith("deposit_"):
-        try:
-            amount = int(data.split("_")[1])
-            await process_deposit(update, context, amount)
-        except ValueError:
-            await query.answer("❌ Ошибка суммы", show_alert=True)
-        return
-    
-    if data.startswith("check_payment_"):
-        payment_id = data.replace("check_payment_", "")
-        await check_payment_status(update, context, payment_id)
-        return
-    
-    if data.startswith("open_course_"):
-        course_id = data.replace("open_course_", "")
-        await open_course(update, context, course_id)
-        return
-    
-    if data.startswith("view_course_"):
-        course_id = data.replace("view_course_", "")
-        course = COURSES[course_id]
-        
-        keyboard = [
-            [InlineKeyboardButton(f"🛒 Купить за {course['price']}₽", callback_data=f"buy_{course_id}")],
-            [InlineKeyboardButton("◀️ Назад к курсам", callback_data="back_to_courses")]
-        ]
-        
-        await query.edit_message_text(
-            f"🎓 **{course['title']}**\n\n"
-            f"💰 Цена: {course['price']}₽\n"
-            f"📚 Описание: {course['description']}\n\n"
-            f"🎬 **После покупки вы получите доступ к полному плейлисту на YouTube.**\n\n"
-            "Выберите действие:",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-        return
-    
-    if data == "back_to_courses":
-        keyboard = []
-        for course_id, course in COURSES.items():
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"{course['title']} - {course['price']}₽",
-                    callback_data=f"view_course_{course_id}"
-                )
-            ])
-        
-        keyboard.append([InlineKeyboardButton("◀️ Главное меню", callback_data="main_menu")])
-        
-        await query.edit_message_text(
-            "🎓 **Доступные курсы:**\n\n"
-            "Выберите курс для покупки:",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-        return
-    
-    if data.startswith("buy_"):
-        course_id = data.replace("buy_", "")
-        await buy_course(update, context, course_id)
-        return
-    
-    if data == "fill_form":
-        task_id = db.get(user_id, "current_task")
-        if task_id:
-            task_info = TASK_DATA.get(task_id)
-            if task_info:
-                db.set(user_id, "waiting_form", True)
-                await query.message.reply_text(
-                    f"📝 **{task_info['title']}**\n\n"
-                    "Отправьте данные в формате:\n"
-                    "Имя Фамилия Телефон Номер_карты @username\n\n"
-                    "Пример:\nИван Иванов +79991234567 1234567812345678 @ivanov"
-                )
-        return
-    
-    if data in TASK_DATA:
-        task_info = TASK_DATA[data]
-        db.set(user_id, "current_task", data)
-        
-        keyboard = [
-            [InlineKeyboardButton("🔗 Перейти по ссылке", url=task_info['link'])],
-            [InlineKeyboardButton("✅ Выполнил задание", callback_data="fill_form")]
-        ]
-        
-        await query.message.reply_text(
-            f"**{task_info['title']}**\n\n{task_info['description']}",
+            "❌ Недостаточно средств!",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
@@ -1878,22 +1481,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             completed_tasks = db.get_list(user_id, "completed_tasks")
             if task_id not in completed_tasks:
                 db.append(user_id, "completed_tasks", task_id)
-                
-                new_achievements = check_achievements(user_id)
-                if new_achievements:
-                    achievements_text = "\n\n🎉 **Новые достижения:**\n"
-                    for ach in new_achievements:
-                        achievements_text += f"✅ {ach}\n"
-                else:
-                    achievements_text = ""
-            else:
-                achievements_text = ""
-        else:
-            achievements_text = ""
+                check_achievements(user_id)
         
         await update.message.reply_text(
             "✅ Спасибо! Данные отправлены администратору.\n\n"
-            f"Ожидайте выплаты. Вопросы: {ADMIN_USERNAME}" + achievements_text,
+            f"Ожидайте выплаты. Вопросы: {ADMIN_USERNAME}",
             reply_markup=main_menu_keyboard(),
             parse_mode='Markdown'
         )
@@ -1901,19 +1493,135 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.set(user_id, "waiting_form", False)
         return
     
-    await handle_main_menu(update, context)
-
-# ====================== ОБРАБОТКА ОШИБОК ======================
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ошибок для стабильной работы"""
-    logger.error(f"Exception while handling an update: {context.error}")
+    # Обработка текстовых команд из меню
+    text = update.message.text
     
-    if isinstance(context.error, Exception):
-        logger.error(f"Error details: {context.error}", exc_info=context.error)
+    if text == "🏆 Задания":
+        keyboard = [
+            [InlineKeyboardButton("Лендинг с заданиями", callback_data="task_1")],
+            [InlineKeyboardButton("Яндекс.Браузер ПК", callback_data="task_2")],
+            [InlineKeyboardButton("Яндекс.Браузер смартфон", callback_data="task_3")],
+            [InlineKeyboardButton("Яндекс.Поиск", callback_data="task_4")],
+            [InlineKeyboardButton("Приложение с Алисой", callback_data="task_5")]
+        ]
+        await update.message.reply_text("🏆 Задания Яндекса:", reply_markup=InlineKeyboardMarkup(keyboard))
     
-    return True
+    elif text == "💼 Работа":
+        keyboard = [
+            [InlineKeyboardButton("Яндекс.Курьер", callback_data="job_1")],
+            [InlineKeyboardButton("Партнёр Альфа-Банк", callback_data="job_2")],
+            [InlineKeyboardButton("Брокер Альфа-Банк", callback_data="job_3")]
+        ]
+        await update.message.reply_text("💼 Работа:", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif text == "💳 Банковские карты":
+        keyboard = [
+            [InlineKeyboardButton("T-BANK Black 500₽", callback_data="card_1")],
+            [InlineKeyboardButton("T-BANK Исламская 700₽", callback_data="card_2")],
+            [InlineKeyboardButton("ALL Airlines 500₽", callback_data="card_3")],
+            [InlineKeyboardButton("T-BANK Platinum 500₽", callback_data="card_4")],
+            [InlineKeyboardButton("ПСБ Кешбэк 700₽", callback_data="card_5")],
+            [InlineKeyboardButton("ВТБ Кредитная 2000₽", callback_data="card_6")],
+            [InlineKeyboardButton("Плати по миру 5000₽", callback_data="card_7")],
+            [InlineKeyboardButton("Альфа-Карта 4000₽", callback_data="card_8")],
+            [InlineKeyboardButton("Семейный счёт 2500₽", callback_data="card_9")],
+            [InlineKeyboardButton("60 дней без % 8500₽", callback_data="card_10")],
+            [InlineKeyboardButton("Детская карта 3500₽", callback_data="card_11")]
+        ]
+        await update.message.reply_text("💳 Банковские карты:", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif text == "💰 Кредиты":
+        keyboard = [
+            [InlineKeyboardButton("Кредит наличными 5000₽", callback_data="credit_1")],
+            [InlineKeyboardButton("Кредит на планы 2500₽", callback_data="credit_2")],
+            [InlineKeyboardButton("Ипотека 250 000₽", callback_data="credit_3")],
+            [InlineKeyboardButton("Предодобренный 25 000₽", callback_data="credit_4")]
+        ]
+        await update.message.reply_text("💰 Кредиты:", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif text == "🛡 Страхование":
+        keyboard = [
+            [InlineKeyboardButton("Zetta спортсмены 1000₽", callback_data="insur_1")],
+            [InlineKeyboardButton("Zetta школьники", callback_data="insur_2")],
+            [InlineKeyboardButton("Сберстрахование 2500₽", callback_data="insur_3")],
+            [InlineKeyboardButton("Т-Страхование", callback_data="insur_4")]
+        ]
+        await update.message.reply_text("🛡 Страхование:", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif text == "🏠 Недвижимость":
+        keyboard = [[InlineKeyboardButton("Яндекс.Аренда 30 000₽", callback_data="estate_1")]]
+        await update.message.reply_text("🏠 Недвижимость:", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif text == "✈️ Туризм и путешествия":
+        keyboard = [
+            [InlineKeyboardButton("AVIASALES 5000₽", callback_data="tour_1")],
+            [InlineKeyboardButton("Яндекс.Путешествия 3000₽", callback_data="tour_2")],
+            [InlineKeyboardButton("KIWITAXI 5000₽", callback_data="tour_3")]
+        ]
+        await update.message.reply_text("✈️ Туризм:", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif text == "🏢 Бизнес":
+        keyboard = [
+            [InlineKeyboardButton("Регистрация бизнеса 25 000₽", callback_data="biz_1")],
+            [InlineKeyboardButton("Расчётный счёт 2000₽", callback_data="biz_2")],
+            [InlineKeyboardButton("Интернет-эквайринг 15 000₽", callback_data="biz_3")]
+        ]
+        await update.message.reply_text("🏢 Бизнес:", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif text == "📊 Брокерские счета":
+        keyboard = [[InlineKeyboardButton("Брокерский счёт 12 500₽", callback_data="broker_1")]]
+        await update.message.reply_text("📊 Брокерские счета:", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif text == "🌟 Подписки":
+        keyboard = [[InlineKeyboardButton("Alfa Only Premium 2500₽", callback_data="sub_1")]]
+        await update.message.reply_text("🌟 Подписки:", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif text == "📱 SIM-карты":
+        keyboard = [[InlineKeyboardButton("Альфа-Мобайл 500₽", callback_data="sim_1")]]
+        await update.message.reply_text("📱 SIM-карты:", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif text == "🎓 Курсы":
+        await courses_menu(update, context)
+    
+    elif text == "💰 Баланс":
+        await balance_menu(update, context)
+    
+    elif text == "👤 Профиль":
+        await profile_menu(update, context)
+    
+    elif text == "📞 Связь с админом":
+        await update.message.reply_text(
+            f"📞 Связь с администратором:\n\n"
+            f"Telegram: {ADMIN_USERNAME}\n\n"
+            "Напишите админу для решения вопросов.",
+            reply_markup=main_menu_keyboard()
+        )
 
-# ====================== ЗАПУСК ======================
+# ====================== HEALTH CHECK СЕРВЕР ======================
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health' or self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'OK')
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        return  # Отключаем логирование
+
+def run_health_server():
+    """Запуск HTTP сервера для health check"""
+    server = HTTPServer(('0.0.0.0', 8000), HealthHandler)
+    print(f"✅ Health check сервер запущен на порту 8000")
+    server.serve_forever()
+
+# ====================== ЗАПУСК БОТА ======================
 def main():
     print("=" * 60)
     print("🚀 БОТ ЗАПУСКАЕТСЯ НА KOYEB")
@@ -1921,8 +1629,15 @@ def main():
     print("=" * 60)
     
     try:
+        # Запускаем health check сервер в отдельном потоке
+        health_thread = threading.Thread(target=run_health_server, daemon=True)
+        health_thread.start()
+        print("✅ Health check сервер запущен")
+        
+        # Создаем и запускаем бота
         application = Application.builder().token(TOKEN).build()
         
+        # Добавляем обработчики
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
         application.add_handler(CommandHandler("balance", balance_menu))
@@ -1931,31 +1646,21 @@ def main():
         application.add_handler(CallbackQueryHandler(button_callback))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         
-        application.add_error_handler(error_handler)
-        
         print("✅ Бот инициализирован")
         print("💳 ЮKасса подключена")
         print("📡 Запускаю polling...")
         
+        # Запускаем бота
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True
+            drop_pending_updates=True,
+            close_loop=False
         )
         
-        print("🤖 Бот готов к работе!")
-        print("=" * 60)
-        print(f"📊 Заданий: {len(TASK_DATA)}")
-        print(f"🎓 Курсов: {len(COURSES)}")
-        print(f"👤 Админ: {ADMIN_USERNAME}")
-        print(f"💳 ЮKасса: ✅ Активна")
-        print(f"👤 Профиль: ✅ Все в одном")
-        print("=" * 60)
-    
     except Exception as e:
         print(f"❌ ОШИБКА: {e}")
         import traceback
         traceback.print_exc()
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()
